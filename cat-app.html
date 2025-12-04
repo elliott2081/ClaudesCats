@@ -157,6 +157,17 @@
         targetSize: 45,
         particles: 'fluff',
         scoreLabel: '🧶'
+      },
+      invaders: {
+        name: '👾 Invaders',
+        bg: '#000000',
+        main: '🚀',
+        mainSize: 60,
+        targets: ['👾'],
+        targetSize: 50,
+        particles: 'stars',
+        scoreLabel: '👾',
+        shooter: true
       }
     };
 
@@ -166,6 +177,7 @@
     let targetX, targetY, chasing = false;
     let score = 0;
     let targets = [];
+    let bullets = [];
     let animationId;
 
     const main = document.getElementById('main');
@@ -180,6 +192,8 @@
       score = 0;
       targets.forEach(t => t.remove());
       targets = [];
+      bullets.forEach(b => b.el.remove());
+      bullets = [];
       document.querySelectorAll('.particle').forEach(p => p.remove());
       applyTheme();
     }
@@ -319,10 +333,60 @@
       setTimeout(() => p.remove(), 6000);
     }
 
+    function fireBullet(tx, ty) {
+      const t = themes[currentTheme];
+      if (!t.shooter) return;
+
+      const bullet = document.createElement('div');
+      bullet.className = 'particle';
+      bullet.textContent = '💥';
+      bullet.style.fontSize = '20px';
+      bullet.style.left = (x + t.mainSize/2) + 'px';
+      bullet.style.top = (y + t.mainSize/2) + 'px';
+      bullet.style.zIndex = '5';
+      document.body.appendChild(bullet);
+
+      const dx = tx - x;
+      const dy = ty - y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const bvx = (dx / dist) * 12;
+      const bvy = (dy / dist) * 12;
+
+      bullets.push({ el: bullet, x: x + t.mainSize/2, y: y + t.mainSize/2, vx: bvx, vy: bvy });
+    }
+
+    function createExplosion(ex, ey) {
+      for (let i = 0; i < 8; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.textContent = ['💥', '✨', '⚡'][Math.floor(Math.random()*3)];
+        p.style.fontSize = '25px';
+        p.style.left = ex + 'px';
+        p.style.top = ey + 'px';
+        p.style.transition = 'all 0.4s ease-out';
+        p.style.zIndex = '50';
+        document.body.appendChild(p);
+        const angle = (i / 8) * Math.PI * 2;
+        setTimeout(() => {
+          p.style.left = (ex + Math.cos(angle) * 80) + 'px';
+          p.style.top = (ey + Math.sin(angle) * 80) + 'px';
+          p.style.opacity = '0';
+        }, 10);
+        setTimeout(() => p.remove(), 400);
+      }
+    }
+
     function setTarget(e) {
       const touch = e.touches ? e.touches[0] : e;
       targetX = touch.clientX;
       targetY = touch.clientY;
+
+      // Fire bullet in shooter mode
+      const t = themes[currentTheme];
+      if (t.shooter) {
+        fireBullet(targetX, targetY);
+      }
+
       chasing = true;
       setTimeout(() => chasing = false, 3000);
     }
@@ -382,13 +446,47 @@
       main.style.left = x + 'px';
       main.style.top = y + 'px';
 
-      // Check collisions
+      // Check collisions (main with targets)
       targets.forEach(target => {
         const tr = target.getBoundingClientRect();
         const tx = tr.left + tr.width/2;
         const ty = tr.top + tr.height/2;
         const dist = Math.sqrt((x+size/2-tx)**2 + (y+size/2-ty)**2);
         if (dist < 50) catchTarget(target);
+      });
+
+      // Update bullets
+      bullets = bullets.filter(b => {
+        b.x += b.vx;
+        b.y += b.vy;
+        b.el.style.left = b.x + 'px';
+        b.el.style.top = b.y + 'px';
+
+        // Check if bullet is off screen
+        if (b.x < -50 || b.x > window.innerWidth + 50 || b.y < -50 || b.y > window.innerHeight + 50) {
+          b.el.remove();
+          return false;
+        }
+
+        // Check bullet collision with invaders
+        for (let i = targets.length - 1; i >= 0; i--) {
+          const target = targets[i];
+          const tr = target.getBoundingClientRect();
+          const tx = tr.left + tr.width/2;
+          const ty = tr.top + tr.height/2;
+          const dist = Math.sqrt((b.x - tx)**2 + (b.y - ty)**2);
+          if (dist < 40) {
+            createExplosion(tx, ty);
+            target.remove();
+            targets.splice(i, 1);
+            score++;
+            scoreEl.textContent = t.scoreLabel ? `${t.scoreLabel} ${score}` : '';
+            setTimeout(spawnTarget, 1500 + Math.random() * 1500);
+            b.el.remove();
+            return false;
+          }
+        }
+        return true;
       });
 
       animationId = requestAnimationFrame(animate);
