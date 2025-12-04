@@ -168,6 +168,36 @@
         particles: 'stars',
         scoreLabel: '👾',
         shooter: true
+      },
+      gameboy: {
+        name: '🎮 GameBoy',
+        bg: '#9bbc0f',
+        main: '',
+        mainSize: 64,
+        mainSvg: `<svg viewBox="0 0 16 16" width="64" height="64" shape-rendering="crispEdges">
+          <rect x="4" y="2" width="8" height="10" fill="#0f380f"/>
+          <rect x="3" y="3" width="2" height="2" fill="#0f380f"/>
+          <rect x="11" y="3" width="2" height="2" fill="#0f380f"/>
+          <rect x="5" y="4" width="2" height="2" fill="#9bbc0f"/>
+          <rect x="9" y="4" width="2" height="2" fill="#9bbc0f"/>
+          <rect x="6" y="5" width="1" height="1" fill="#0f380f"/>
+          <rect x="9" y="5" width="1" height="1" fill="#0f380f"/>
+          <rect x="7" y="7" width="2" height="1" fill="#306230"/>
+          <rect x="5" y="9" width="6" height="1" fill="#9bbc0f"/>
+          <rect x="4" y="10" width="1" height="1" fill="#9bbc0f"/>
+          <rect x="11" y="10" width="1" height="1" fill="#9bbc0f"/>
+          <rect x="2" y="0" width="2" height="2" fill="#0f380f"/>
+          <rect x="12" y="0" width="2" height="2" fill="#0f380f"/>
+          <rect x="6" y="13" width="1" height="2" fill="#0f380f"/>
+          <rect x="9" y="13" width="1" height="2" fill="#0f380f"/>
+          <rect x="5" y="14" width="1" height="2" fill="#0f380f"/>
+          <rect x="10" y="14" width="1" height="2" fill="#0f380f"/>
+        </svg>`,
+        targets: [],
+        targetSize: 40,
+        particles: 'none',
+        scoreLabel: '',
+        gbColor: '#0f380f'
       }
     };
 
@@ -202,10 +232,15 @@
       const t = themes[currentTheme];
       document.body.style.background = t.bg;
 
-      if (t.mainStyle) {
+      if (t.mainSvg) {
+        main.innerHTML = t.mainSvg;
+        main.style.cssText = `width: ${t.mainSize}px; height: ${t.mainSize}px; image-rendering: pixelated;`;
+      } else if (t.mainStyle) {
         main.textContent = '';
+        main.innerHTML = '';
         main.style.cssText = t.mainStyle;
       } else {
+        main.innerHTML = '';
         main.textContent = t.main;
         main.style.cssText = `font-size: ${t.mainSize}px; filter: drop-shadow(0 0 20px rgba(255,200,100,0.5));`;
       }
@@ -437,11 +472,14 @@
       if (speed > maxSpeed) { vx = (vx/speed) * maxSpeed; vy = (vy/speed) * maxSpeed; }
       if (speed < minSpeed) { vx *= 1.1; vy *= 1.1; }
 
-      // Rotate based on direction (skip for laser dot)
-      if (!t.mainStyle) {
+      // Rotate based on direction (skip for laser dot and SVG)
+      if (!t.mainStyle && !t.mainSvg) {
         const angle = Math.atan2(vy, vx) * 180 / Math.PI;
         const flip = vx < 0 ? 'scaleX(-1)' : '';
         main.style.transform = `${flip} rotate(${vx < 0 ? -angle-180 : angle}deg)`;
+      } else if (t.mainSvg) {
+        // Just flip horizontally for SVG
+        main.style.transform = vx < 0 ? 'scaleX(-1)' : '';
       }
       main.style.left = x + 'px';
       main.style.top = y + 'px';
