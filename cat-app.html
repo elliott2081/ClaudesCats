@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Cat Toy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      touch-action: none;
+    }
+    #main {
+      position: absolute;
+      transition: transform 0.1s ease-out;
+      cursor: pointer;
+      user-select: none;
+      z-index: 10;
+    }
+    .target {
+      position: absolute;
+      cursor: pointer;
+      transition: transform 0.3s;
+    }
+    .target:hover { transform: scale(1.3); }
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+    #controls {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+      z-index: 100;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 95%;
+    }
+    .btn {
+      padding: 12px 16px;
+      font-size: 18px;
+      border: none;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.25);
+      color: #fff;
+      cursor: pointer;
+      backdrop-filter: blur(5px);
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+    .btn.active {
+      background: rgba(255,255,255,0.5);
+      box-shadow: 0 0 15px rgba(255,255,255,0.5);
+    }
+    #speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.2);
+      padding: 8px 15px;
+      border-radius: 12px;
+      backdrop-filter: blur(5px);
+    }
+    #speed-control label { color: #fff; font-family: sans-serif; }
+    #speed { width: 100px; }
+    #fs {
+      position: fixed;
+      top: 20px; left: 20px;
+      font-size: 32px;
+      background: rgba(255,255,255,0.2);
+      border: none;
+      border-radius: 10px;
+      padding: 10px 15px;
+      color: #fff;
+      cursor: pointer;
+      z-index: 100;
+    }
+    #score {
+      position: fixed;
+      top: 20px; right: 20px;
+      color: #fff;
+      font-family: sans-serif;
+      font-size: 24px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      z-index: 100;
+    }
+  </style>
+</head>
+<body>
+  <button id="fs" onclick="document.documentElement.requestFullscreen()">⛶</button>
+  <div id="score"></div>
+  <div id="main"></div>
+  <div id="controls"></div>
+
+  <script>
+    const themes = {
+      underwater: {
+        name: '🐱 Fish',
+        bg: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        main: '🐱',
+        mainSize: 80,
+        targets: ['🐟', '🐠', '🐡'],
+        targetSize: 40,
+        particles: 'bubbles',
+        scoreLabel: '🐟'
+      },
+      laser: {
+        name: '🔴 Laser',
+        bg: '#000000',
+        main: '',
+        mainSize: 30,
+        mainStyle: 'width:30px;height:30px;background:radial-gradient(circle,#ff0000 0%,#ff0000 40%,#aa0000 70%,transparent 100%);border-radius:50%;box-shadow:0 0 20px #ff0000,0 0 40px #ff0000,0 0 60px #aa0000;',
+        targets: [],
+        particles: 'none',
+        scoreLabel: ''
+      },
+      pond: {
+        name: '🦆 Ducks',
+        bg: 'linear-gradient(180deg, #87CEEB 0%, #4A90A4 50%, #2E5A6B 100%)',
+        main: '🐾',
+        mainSize: 60,
+        targets: ['🦆', '🦆', '🦆'],
+        targetSize: 50,
+        particles: 'ripples',
+        scoreLabel: '🦆'
+      },
+      space: {
+        name: '🚀 Space',
+        bg: 'linear-gradient(135deg, #0c0c0c 0%, #1a0a2e 50%, #0a0a1a 100%)',
+        main: '🚀',
+        mainSize: 70,
+        targets: ['⭐', '🌟', '💫', '🪐'],
+        targetSize: 35,
+        particles: 'stars',
+        scoreLabel: '⭐'
+      },
+      garden: {
+        name: '🦋 Garden',
+        bg: 'linear-gradient(180deg, #90EE90 0%, #228B22 50%, #006400 100%)',
+        main: '🐱',
+        mainSize: 80,
+        targets: ['🦋', '🐛', '🐞', '🦗'],
+        targetSize: 40,
+        particles: 'leaves',
+        scoreLabel: '🦋'
+      },
+      yarn: {
+        name: '🧶 Yarn',
+        bg: 'linear-gradient(135deg, #F5DEB3 0%, #DEB887 50%, #D2691E 100%)',
+        main: '🐱',
+        mainSize: 80,
+        targets: ['🧶', '🧵', '🎀'],
+        targetSize: 45,
+        particles: 'fluff',
+        scoreLabel: '🧶'
+      }
+    };
+
+    let currentTheme = 'underwater';
+    let speedMultiplier = 1;
+    let x, y, vx, vy;
+    let targetX, targetY, chasing = false;
+    let score = 0;
+    let targets = [];
+    let animationId;
+
+    const main = document.getElementById('main');
+    const scoreEl = document.getElementById('score');
+    const controlsEl = document.getElementById('controls');
+
+    function init() {
+      x = window.innerWidth / 2;
+      y = window.innerHeight / 2;
+      vx = (2 + Math.random() * 2) * speedMultiplier;
+      vy = (1.5 + Math.random() * 2) * speedMultiplier;
+      score = 0;
+      targets.forEach(t => t.remove());
+      targets = [];
+      document.querySelectorAll('.particle').forEach(p => p.remove());
+      applyTheme();
+    }
+
+    function applyTheme() {
+      const t = themes[currentTheme];
+      document.body.style.background = t.bg;
+
+      if (t.mainStyle) {
+        main.textContent = '';
+        main.style.cssText = t.mainStyle;
+      } else {
+        main.textContent = t.main;
+        main.style.cssText = `font-size: ${t.mainSize}px; filter: drop-shadow(0 0 20px rgba(255,200,100,0.5));`;
+      }
+
+      scoreEl.textContent = t.scoreLabel ? `${t.scoreLabel} ${score}` : '';
+
+      // Spawn targets
+      if (t.targets.length > 0) {
+        for (let i = 0; i < 5; i++) {
+          setTimeout(() => spawnTarget(), i * 300);
+        }
+      }
+
+      // Update buttons
+      document.querySelectorAll('.theme-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.theme === currentTheme);
+      });
+    }
+
+    function spawnTarget() {
+      const t = themes[currentTheme];
+      if (t.targets.length === 0) return;
+
+      const el = document.createElement('div');
+      el.className = 'target';
+      el.textContent = t.targets[Math.floor(Math.random() * t.targets.length)];
+      el.style.fontSize = t.targetSize + 'px';
+      el.style.left = Math.random() * (window.innerWidth - 60) + 'px';
+      el.style.top = Math.random() * (window.innerHeight - 150) + 'px';
+      el.onclick = () => catchTarget(el);
+      document.body.appendChild(el);
+      targets.push(el);
+    }
+
+    function catchTarget(el) {
+      const rect = el.getBoundingClientRect();
+      createCatchEffect(rect.left, rect.top);
+      el.remove();
+      targets = targets.filter(t => t !== el);
+      score++;
+      const t = themes[currentTheme];
+      scoreEl.textContent = t.scoreLabel ? `${t.scoreLabel} ${score}` : '';
+      setTimeout(spawnTarget, 1000 + Math.random() * 2000);
+    }
+
+    function createCatchEffect(x, y) {
+      for (let i = 0; i < 5; i++) {
+        const p = document.createElement('div');
+        p.className = 'particle';
+        p.style.left = x + 'px';
+        p.style.top = y + 'px';
+        p.style.width = '10px';
+        p.style.height = '10px';
+        p.style.background = ['#ff0', '#f0f', '#0ff', '#0f0'][Math.floor(Math.random()*4)];
+        p.style.transition = 'all 0.5s ease-out';
+        document.body.appendChild(p);
+        setTimeout(() => {
+          p.style.transform = `translate(${(Math.random()-0.5)*100}px, ${(Math.random()-0.5)*100}px) scale(0)`;
+          p.style.opacity = '0';
+        }, 10);
+        setTimeout(() => p.remove(), 500);
+      }
+    }
+
+    function createParticle() {
+      const t = themes[currentTheme];
+      if (t.particles === 'none') return;
+
+      const p = document.createElement('div');
+      p.className = 'particle';
+
+      if (t.particles === 'bubbles') {
+        const size = 10 + Math.random() * 25;
+        p.style.width = size + 'px';
+        p.style.height = size + 'px';
+        p.style.background = 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.8), rgba(100,200,255,0.3))';
+        p.style.left = Math.random() * window.innerWidth + 'px';
+        p.style.top = window.innerHeight + 'px';
+        p.style.transition = `all ${3 + Math.random() * 3}s linear`;
+        document.body.appendChild(p);
+        setTimeout(() => { p.style.top = '-50px'; p.style.opacity = '0'; }, 10);
+      } else if (t.particles === 'stars') {
+        p.textContent = ['✨', '·', '•'][Math.floor(Math.random()*3)];
+        p.style.fontSize = (10 + Math.random() * 15) + 'px';
+        p.style.left = Math.random() * window.innerWidth + 'px';
+        p.style.top = Math.random() * window.innerHeight + 'px';
+        p.style.color = '#fff';
+        p.style.transition = 'opacity 1s';
+        document.body.appendChild(p);
+        setTimeout(() => { p.style.opacity = '0'; }, 500);
+      } else if (t.particles === 'leaves') {
+        p.textContent = ['🍃', '🌿', '☘️'][Math.floor(Math.random()*3)];
+        p.style.fontSize = '20px';
+        p.style.left = Math.random() * window.innerWidth + 'px';
+        p.style.top = '-30px';
+        p.style.transition = `all ${4 + Math.random() * 3}s linear`;
+        document.body.appendChild(p);
+        setTimeout(() => {
+          p.style.top = window.innerHeight + 50 + 'px';
+          p.style.left = (parseFloat(p.style.left) + (Math.random()-0.5)*200) + 'px';
+        }, 10);
+      } else if (t.particles === 'ripples') {
+        p.style.width = '20px';
+        p.style.height = '20px';
+        p.style.border = '2px solid rgba(255,255,255,0.5)';
+        p.style.left = Math.random() * window.innerWidth + 'px';
+        p.style.top = Math.random() * window.innerHeight + 'px';
+        p.style.transition = 'all 2s ease-out';
+        document.body.appendChild(p);
+        setTimeout(() => { p.style.transform = 'scale(4)'; p.style.opacity = '0'; }, 10);
+      } else if (t.particles === 'fluff') {
+        p.textContent = '•';
+        p.style.fontSize = (5 + Math.random() * 10) + 'px';
+        p.style.color = ['#fff', '#fdd', '#ddf'][Math.floor(Math.random()*3)];
+        p.style.left = Math.random() * window.innerWidth + 'px';
+        p.style.top = Math.random() * window.innerHeight + 'px';
+        p.style.transition = `all ${2 + Math.random() * 2}s linear`;
+        document.body.appendChild(p);
+        setTimeout(() => {
+          p.style.top = (parseFloat(p.style.top) + (Math.random()-0.5)*100) + 'px';
+          p.style.opacity = '0';
+        }, 10);
+      }
+
+      setTimeout(() => p.remove(), 6000);
+    }
+
+    function setTarget(e) {
+      const touch = e.touches ? e.touches[0] : e;
+      targetX = touch.clientX;
+      targetY = touch.clientY;
+      chasing = true;
+      setTimeout(() => chasing = false, 3000);
+    }
+    document.addEventListener('click', setTarget);
+    document.addEventListener('touchstart', setTarget);
+
+    function animate() {
+      const t = themes[currentTheme];
+      const size = t.mainSize || 30;
+      const w = window.innerWidth - size;
+      const h = window.innerHeight - size - 100;
+
+      if (chasing) {
+        const dx = targetX - x;
+        const dy = targetY - y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > 5) {
+          vx = (dx / dist) * 5 * speedMultiplier;
+          vy = (dy / dist) * 5 * speedMultiplier;
+        } else {
+          chasing = false;
+        }
+      }
+
+      x += vx;
+      y += vy;
+
+      if (x <= 0 || x >= w) {
+        vx *= -1;
+        vx += (Math.random() - 0.5) * 0.5 * speedMultiplier;
+      }
+      if (y <= 0 || y >= h) {
+        vy *= -1;
+        vy += (Math.random() - 0.5) * 0.5 * speedMultiplier;
+      }
+
+      x = Math.max(0, Math.min(w, x));
+      y = Math.max(0, Math.min(h, y));
+
+      if (Math.random() < 0.02) {
+        vx += (Math.random() - 0.5) * 0.5 * speedMultiplier;
+        vy += (Math.random() - 0.5) * 0.5 * speedMultiplier;
+      }
+
+      const speed = Math.sqrt(vx*vx + vy*vy);
+      const maxSpeed = 6 * speedMultiplier;
+      const minSpeed = 1 * speedMultiplier;
+      if (speed > maxSpeed) { vx = (vx/speed) * maxSpeed; vy = (vy/speed) * maxSpeed; }
+      if (speed < minSpeed) { vx *= 1.1; vy *= 1.1; }
+
+      // Rotate based on direction (skip for laser dot)
+      if (!t.mainStyle) {
+        const angle = Math.atan2(vy, vx) * 180 / Math.PI;
+        const flip = vx < 0 ? 'scaleX(-1)' : '';
+        main.style.transform = `${flip} rotate(${vx < 0 ? -angle-180 : angle}deg)`;
+      }
+      main.style.left = x + 'px';
+      main.style.top = y + 'px';
+
+      // Check collisions
+      targets.forEach(target => {
+        const tr = target.getBoundingClientRect();
+        const tx = tr.left + tr.width/2;
+        const ty = tr.top + tr.height/2;
+        const dist = Math.sqrt((x+size/2-tx)**2 + (y+size/2-ty)**2);
+        if (dist < 50) catchTarget(target);
+      });
+
+      animationId = requestAnimationFrame(animate);
+    }
+
+    // Create controls
+    Object.keys(themes).forEach(key => {
+      const btn = document.createElement('button');
+      btn.className = 'btn theme-btn';
+      btn.dataset.theme = key;
+      btn.textContent = themes[key].name;
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        currentTheme = key;
+        init();
+      };
+      controlsEl.appendChild(btn);
+    });
+
+    const speedDiv = document.createElement('div');
+    speedDiv.id = 'speed-control';
+    speedDiv.innerHTML = '<label>🐢</label><input type="range" id="speed" min="0.3" max="3" step="0.1" value="1"><label>🐇</label>';
+    controlsEl.appendChild(speedDiv);
+    document.getElementById('speed').oninput = (e) => {
+      e.stopPropagation();
+      speedMultiplier = parseFloat(e.target.value);
+    };
+    document.getElementById('speed').onclick = (e) => e.stopPropagation();
+
+    // Particles
+    setInterval(createParticle, 400);
+
+    // Start
+    init();
+    animate();
+  </script>
+</body>
+</html>
